@@ -43,10 +43,10 @@ df.tail()
 # ----------------------------------------------------------------
 # Data Exploration
 # ----------------------------------------------------------------
-df.info()  
-df.discribe(include=["object"]) 
+df.info()
+df.describe(include=["object"])
 
-df.select_dtypes(include=["float64"]).columns  
+df.select_dtypes(include=["float64"]).columns
 
 # --------------------------------------------------------------
 # Working with datetimes
