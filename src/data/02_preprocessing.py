@@ -5,8 +5,6 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-
-from glob import glob
 import os
 import warnings
 
@@ -16,28 +14,11 @@ pd.set_option("display.max_columns", None)
 pd.set_option("display.max_rows", None)
 
 
-# ----------------------------------------------------------------
-# Load datasets in dircetory
-# ----------------------------------------------------------------
-# 指定要遍历的目录
-directory = "../../data/raw/chunks"
-
-# 使用 os.walk 遍历目录
-for dirpath, dirnames, filenames in os.walk(directory):
-    print(f"Directory: {dirpath}")
-    for filename in filenames:
-        print(f"File: {os.path.join(dirpath, filename)}")
-
-files = glob("../../data/raw/chunks/*.csv")
-len(files)
-for f in files:
-    df = pd.read_csv(f)
-
 # --------------------------------------------------------------
 # Read single CSV file
 # --------------------------------------------------------------
 # pandas.read_csv: Read a comma-separated values (csv) file into DataFrame.
-file_path = "../../data/raw/chunks/HomeC_split_1.csv"
+file_path = "../../data/raw/subset_file.csv"
 df = pd.read_csv(file_path, low_memory=False)
 
 df.shape
@@ -219,4 +200,3 @@ df.drop(
     axis=1,
     inplace=True,
 )
-
