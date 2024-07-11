@@ -185,6 +185,7 @@ df.info()
 
 
 # Replace invalid values in column 'cloudCover' with backfill method
+df["cloudCover"].value_counts()
 df["cloudCover"].replace(["cloudCover"], method="bfill", inplace=True)
 df["cloudCover"] = df["cloudCover"].astype("float")
 
@@ -193,14 +194,29 @@ df["cloudCover"] = df["cloudCover"].astype("float")
 df["icon"].value_counts()
 df = df.drop(columns=["summary", "icon"])
 
-# Removing Duplicate Columns
 
-
-# --------------------------------------------------------------
-# EDA
-# --------------------------------------------------------------
-# check the correlation between continuous variables
-corr = df.corr()
-plt.figure(figsize=(10, 10))
-sns.heatmap(corr, annot=True, fmt=".2f", cmap="coolwarm")
+# Check Correlation between columns
+# choose columns except column "time" and "timing"
+df_corr_col = df.drop(columns=["time", "timing"]).columns
+fig = plt.subplots(figsize=(10, 8))
+corr = df[df_corr_col].corr()
+sns.heatmap(corr[corr > 0.9], vmax=1, vmin=-1, center=0)
 plt.show()
+
+#'use' - 'House overall'
+# 'gen' and 'Solar'
+# 'temperature' and 'apparentTemperature'
+# columns' correlation coefficient is almost over 0.95, so we need to put these columns together as a new columns.
+df[
+    ["use", "House overall", "gen", "Solar", "temperature", "apparentTemperature"]
+].corr()
+
+# Removing Duplicate Columns
+df["use_HO"] = df["use"]
+df["gen_Solar"] = df["gen"]
+df.drop(
+    ["use", "House overall", "gen", "Solar", "apparentTemperature"],
+    axis=1,
+    inplace=True,
+)
+
