@@ -9,17 +9,10 @@ import matplotlib as mpl
 # --------------------------------------------------------------
 df = pd.read_pickle("../../data/interim/01_data_processed.pkl")
 
+
 # --------------------------------------------------------------
 # Normal Distribution  Plot
 # --------------------------------------------------------------
-
-# plotting settings
-plt.style.available
-mpl.style.use("seaborn-v0_8-deep")
-mpl.rcParams["figure.figsize"] = (20, 5)
-mpl.rcParams["figure.dpi"] = 100
-
-
 def UVA_numeric(data):
     var_group = data.columns
 
@@ -47,6 +40,11 @@ def UVA_numeric(data):
         sns.scatterplot(x=[mini, maxi], y=[0, 0], color="orange", label="min/max")
         sns.scatterplot(x=[mean], y=[0], color="red", label="mean")
         sns.scatterplot(x=[median], y=[0], color="blue", label="median")
+
+        # Set consistent x and y limits
+        plt.xlim(mini - 0.1 * ran, maxi + 0.1 * ran)
+        plt.ylim(bottom=0)
+
         plt.xlabel(i, fontsize=12)
         plt.ylabel("density")
         plt.title(
@@ -55,10 +53,13 @@ def UVA_numeric(data):
             ),
             fontsize=10,
         )
-        plt.legend()
+        plt.legend(loc="upper right")
         plt.show()
 
 
-plot_df = df[["use_HO", "gen_Solar", "Dishwasher"]]
+plot_df = df[["use_HO", "gen_Solar"]]
+plot_df = df[["Microwave"]]
 
 UVA_numeric(plot_df)
+
+df["Microwave"].describe()
