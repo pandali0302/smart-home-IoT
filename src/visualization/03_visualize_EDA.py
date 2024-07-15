@@ -4,6 +4,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+from pandas.api.types import CategoricalDtype
 
 # --------------------------------------------------------------
 # Load data
@@ -88,10 +89,10 @@ correlation_plot(df[app_columns.append(weather_columns)])
 
 
 # ----------------------------------------------------------------
-# Understanding Energy Consumption Patterns
+# Identify Peak Usage Times
 # ----------------------------------------------------------------
 
-# 1.Identify Peak Usage Times: Determine when each appliance consumes the most energy.
+# Identify Peak Usage Times: Determine when each appliance consumes the most energy.
 # Resample the data to hourly intervals and sum the consumption
 hourly_data = df.groupby("hour")[app_columns].sum()
 # Find the hour with the maximum consumption for each appliance
@@ -100,8 +101,10 @@ peak_hours = hourly_data.idxmax()
 print("Peak usage hours for each appliance:")
 print(peak_hours)
 
-
-# 2.Correlate with Activities: Relate energy spikes to specific activities (e.g., cooking, working in the home office).
+# ----------------------------------------------------------------
+# Correlate with Activities
+# ----------------------------------------------------------------
+# Correlate with Activities: Relate energy spikes to specific activities (e.g., cooking, working in the home office).
 cooking_hourly_data = (
     hourly_data["Kitchen"] + hourly_data["Dishwasher"] + hourly_data["Microwave"]
 )
@@ -113,9 +116,8 @@ print(f"Peak cooking usage hours: {cooking_peak_hours}")  # 1
 print(f"Peak working usage hours: {working_peak_hours}")  # 23
 
 
-# 3.Daily/Weekly Trends: Identify patterns over days or weeks.
 # ----------------------------------------------------------------
-# Time-Series Analysis
+# Time-Series Analysis / Seasonality and Trend
 # ----------------------------------------------------------------
 # Iterate each appliance, plot the time series, resample to daily
 def time_series_plot(data):
@@ -167,8 +169,7 @@ df.loc[(df["hour"] >= 4) & (df["hour"] < 12), "timing"] = "Morning"
 df.loc[(df["hour"] >= 12) & (df["hour"] < 17), "timing"] = "Afternoon"
 df.loc[(df["hour"] >= 17) & (df["hour"] < 22), "timing"] = "Evening"
 
-from pandas.api.types import CategoricalDtype
-
+# convert timing column to categorical type
 cat_timing = CategoricalDtype(
     ["Morning", "Afternoon", "Evening", "Night"], ordered=True
 )

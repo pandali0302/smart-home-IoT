@@ -1,27 +1,49 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+import seaborn as sns
 import matplotlib.pyplot as plt
-import matplotlib as mpl
+import scipy.stats as stats
+import pylab
+from sklearn.neighbors import LocalOutlierFactor
 import math
 import scipy
-from sklearn.neighbors import LocalOutlierFactor  # pip install scikit-learn
 
 # --------------------------------------------------------------
 # Load data
 # --------------------------------------------------------------
-df = pd.read_pickle("../../data/interim/01_data_processed.pkl")
+df = pd.read_pickle("../../data/interim/02_add_time_features.pkl")
+df.info()
 
-outlier_columns = list(df.columns[:6])
+outlier_columns = df.columns[:13]
+
+
+# ----------------------------------------------------------------
+# function to return plots for the feature
+# ----------------------------------------------------------------
+cp = df.copy()
+outlier_columns = cp.columns[:13]
+
+
+def normality(data, feature):
+    plt.figure(figsize=(10, 5))
+    plt.subplot(1, 2, 1)
+    sns.kdeplot(data[feature])
+    plt.subplot(1, 2, 2)
+    stats.probplot(data[feature], plot=pylab)
+    plt.show()
+
+
+for col in outlier_columns:
+    normality(cp, col)
+
+normality(cp, "use_HO")
+cp["use_HO_log"] = np.log(df["use_HO"])
+normality(cp, "use_HO_log")
 
 
 # --------------------------------------------------------------
 # Plotting outliers
 # --------------------------------------------------------------
-mpl.style.use("fivethirtyeight")
-mpl.rcParams["figure.figsize"] = (20, 5)
-mpl.rcParams["figure.dpi"] = 100
-
-df[["gyr_y", "label"]].boxplot(by="label", figsize=(20, 10))
 
 
 def plot_binary_outliers(dataset, col, outlier_col, reset_index):
@@ -104,12 +126,11 @@ def mark_outliers_iqr(dataset, col):
 
 
 # Plot a single column
-col = "acc_x"
+col = "use_HO"
 dataset = mark_outliers_iqr(df, col)
 plot_binary_outliers(
     dataset=dataset, col=col, outlier_col=col + "_outlier", reset_index=True
 )
-
 
 # Loop over all columns
 for col in outlier_columns:
@@ -118,10 +139,49 @@ for col in outlier_columns:
         dataset=dataset, col=col, outlier_col=col + "_outlier", reset_index=True
     )
 
+
+# ----------------------------------------------------------------
+# Z-score (distribution based)
+# ----------------------------------------------------------------
+def mark_outliers_zscore(dataset, col):
+    """Function to mark values as outliers using the Z-score method.
+
+    Args:
+        dataset (pd.DataFrame): The dataset
+        col (string): The column you want apply outlier detection to
+
+    Returns:
+        pd.DataFrame: The original dataframe with an extra boolean column
+        indicating whether the value is an outlier or not.
+    """
+
+    dataset = dataset.copy()
+
+    z_scores = np.abs(stats.zscore(dataset[col]))
+    threshold = 3
+
+    dataset[col + "_outlier"] = z_scores > threshold
+
+    return dataset
+
+
+# Plot a single column
+col = "use_HO"
+dataset = mark_outliers_zscore(df, col)
+plot_binary_outliers(
+    dataset=dataset, col=col, outlier_col=col + "_outlier", reset_index=True
+)
+
+# Loop over all columns
+for col in outlier_columns:
+    dataset = mark_outliers_zscore(df, col)
+    plot_binary_outliers(
+        dataset=dataset, col=col, outlier_col=col + "_outlier", reset_index=True
+    )
+
 # --------------------------------------------------------------
 # Chauvenets criteron (distribution based)
 # --------------------------------------------------------------
-
 
 # Check for normal distribution
 df[outlier_columns[:3] + ["label"]].plot.hist(
@@ -185,11 +245,10 @@ for col in outlier_columns:
         dataset=dataset, col=col, outlier_col=col + "_outlier", reset_index=True
     )
 
+
 # --------------------------------------------------------------
 # Local outlier factor (distance based)
 # --------------------------------------------------------------
-
-
 # Insert LOF function
 def mark_outliers_lof(dataset, columns, n=20):
     """Mark values as outliers using LOF
@@ -215,6 +274,12 @@ def mark_outliers_lof(dataset, columns, n=20):
     return dataset, outliers, X_scores
 
 
+col = "use_HO"
+dataset, outliers, X_scores = mark_outliers_lof(df, [col])
+plot_binary_outliers(
+    dataset=dataset, col=col, outlier_col="outlier_lof", reset_index=True
+)
+
 # Loop over all columns
 dataset, outliers, X_scores = mark_outliers_lof(df, outlier_columns)
 for col in outlier_columns:
@@ -222,30 +287,49 @@ for col in outlier_columns:
         dataset=dataset, col=col, outlier_col="outlier_lof", reset_index=True
     )
 
-# --------------------------------------------------------------
-# Check outliers grouped by label
-# --------------------------------------------------------------
-label = "bench"
-for col in outlier_columns:
-    dataset = mark_outliers_iqr(df[df["label"] == label], col)
-    plot_binary_outliers(
-        dataset=dataset, col=col, outlier_col=col + "_outlier", reset_index=True
-    )
+df.info()
 
-for col in outlier_columns:
-    dataset = mark_outliers_chauvenet(df[df["label"] == label], col)
-    plot_binary_outliers(
-        dataset=dataset, col=col, outlier_col=col + "_outlier", reset_index=True
-    )
+# ----------------------------------------------------------------
+# Machine Learning Models:
+# Using models to predict normal consumption and flag anomalies
+# (e.g., a sudden increase in fridge consumption might indicate a malfunction).
+# ----------------------------------------------------------------
+# use machine learning models to predict normal consumption and flag anomalies.
+# use anomaly detection algorithms such as Isolation Forest.
+from sklearn.ensemble import IsolationForest
 
 
-dataset, outliers, X_scores = mark_outliers_lof(
-    df[df["label"] == label], outlier_columns
+def mark_outliers_isolation_forest(dataset, columns, contamination=0.01):
+    """Mark values as outliers using Isolation Forest
+
+    Args:
+        dataset (pd.DataFrame): The dataset
+        col (string): The column you want apply outlier detection to
+        contamination (float, optional): The proportion of outliers in the data.
+        Defaults to 0.01.
+
+    Returns:
+        pd.DataFrame: The original dataframe with an extra boolean column
+        indicating whether the value is an outlier or not.
+    """
+
+    dataset = dataset.copy()
+
+    iso_forest = IsolationForest(contamination=contamination, random_state=42)
+    data = dataset[columns]
+    outliers = iso_forest.fit_predict(data)
+    # -1 indicates an anomaly, 1 indicates normal
+    dataset["outlier_iso_forest"] = outliers == -1
+    return dataset, outliers
+
+
+# Plot a single column
+col = "Fridge"
+dataset, _ = mark_outliers_isolation_forest(df, [col])
+plot_binary_outliers(
+    dataset=dataset, col=col, outlier_col="outlier_iso_forest", reset_index=True
 )
-for col in outlier_columns:
-    plot_binary_outliers(
-        dataset=dataset, col=col, outlier_col="outlier_lof", reset_index=True
-    )
+
 
 # --------------------------------------------------------------
 # Choose method and deal with outliers
@@ -253,8 +337,8 @@ for col in outlier_columns:
 
 # Test on single column
 col = "gyr_z"
-dataset = mark_outliers_chauvenet(df,col=col)
-dataset.loc[dataset["gyr_z_outlier"],col] = np.nan
+dataset = mark_outliers_chauvenet(df, col=col)
+dataset.loc[dataset["gyr_z_outlier"], col] = np.nan
 
 
 # Create a loop
@@ -269,7 +353,9 @@ for col in outlier_columns:
         dataset.loc[dataset[col + "_outlier"], col] = np.nan
 
         # update the column in the original dataframe
-        outlier_removed_df.loc[(outlier_removed_df["label"]==label),col] = dataset[col]
+        outlier_removed_df.loc[(outlier_removed_df["label"] == label), col] = dataset[
+            col
+        ]
 
         n_outliers = len(dataset) - len(dataset[col].dropna())
         print(f"Removed {n_outliers} from {col} for {label}")
@@ -281,4 +367,4 @@ outlier_removed_df.info()
 # Export new dataframe
 # --------------------------------------------------------------
 
-outlier_removed_df.to_pickle("../../data/interim/02-outlier_removed_chauvenet.pkl")
+outlier_removed_df.to_pickle("../../data/interim/02.pkl")
