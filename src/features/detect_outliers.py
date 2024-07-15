@@ -5,6 +5,12 @@ import matplotlib.pyplot as plt
 import scipy.stats as stats
 import pylab
 from sklearn.neighbors import LocalOutlierFactor
+from statsmodels.tsa.seasonal import seasonal_decompose
+from DataTransformation import LowPassFilter, PrincipalComponentAnalysis
+from TemporalAbstraction import NumericalAbstraction
+from FrequencyAbstraction import FourierTransformation
+from sklearn.cluster import KMeans
+
 
 # --------------------------------------------------------------
 # Load data
@@ -255,8 +261,223 @@ def mark_outliers_isolation_forest(dataset, columns, contamination=0.01):
 
 
 # Plot a single column
-col = "Fridge"
+col = "use_HO"
 dataset, _ = mark_outliers_isolation_forest(df, [col])
 plot_binary_outliers(
     dataset=dataset, col=col, outlier_col="outlier_iso_forest", reset_index=True
 )
+
+
+# ----------------------------------------------------------------
+# Time-Series Analysis / Seasonality and Trend
+# ----------------------------------------------------------------
+# Iterate each appliance, plot the time series, resample to daily
+def time_series_plot(data):
+    data_resampled = data.resample(
+        "D"
+    ).mean()  # Resample time to day and calculate the mean
+    for i in data_resampled.columns:
+        plt.figure(figsize=(15, 5), dpi=100)
+        sns.lineplot(x=data_resampled.index, y=data_resampled[i], label=i)
+        plt.title(f"{i} Time Series")
+        plt.legend()
+        plt.show()
+
+
+app_columns = df.columns[:13]
+weather_columns = df.columns[13:-7]
+time_series_plot(df[app_columns])
+#  some appliances have seasonality, some have trend, some have both
+#  Furnace has a trend, Wine cellar has seasonality, Fridge has both
+time_series_plot(df[weather_columns])
+#  temperature and dewPoint have seasonality, visibility has trend
+
+time_series_plot(df[["use_HO"]])
+
+# ----------------------------------------------------------------
+# Detrending and Deseasonalizing
+# ----------------------------------------------------------------
+"""
+Removing trends helps isolate sudden changes by eliminating long-term variations that could mask these anomalies. Methods like differencing and seasonal decomposition are effective:
+
+    Differencing: Removes linear trends and helps highlight abrupt changes.
+
+    Seasonal Decomposition: Separates the time series into trend, seasonal, and residual components, allowing you to focus on the residual (which contains the anomalies).
+"""
+# ----------------------------------------------------------------
+# Seasonal Decomposition: Suitable for time series with clear seasonality and periodicity.
+# ----------------------------------------------------------------
+# copy the data
+df_sd = df.copy()
+df_sd = df_sd[["use_HO"]].resample("D").mean()
+
+# Seasonal decomposition
+result = seasonal_decompose(df_sd["use_HO"], model="additive")
+df_sd["trend"] = result.trend
+df_sd["seasonal"] = result.seasonal
+df_sd["residual"] = result.resid  #  using the residual component
+# df_sd["detrended"] = df_sd["use_HO"] - df_sd["trend"]
+
+# plot to visualize the components
+plt.figure(figsize=(15, 5), dpi=100)
+sns.lineplot(x=df_sd.index, y=df_sd["residual"])
+# sns.lineplot(x=df_sd.index, y=df_sd["trend"])
+# sns.lineplot(x=df_sd.index, y=df_sd["seasonal"])
+plt.title("Seasonal Decomposition")
+plt.legend(["Residual", "Trend", "Seasonal"])
+plt.show()
+
+# Visualization per component
+plt.figure(figsize=(10, 6))
+plt.subplot(411)
+plt.plot(df_sd["use_HO"], label="Original")
+plt.legend(loc="best")
+plt.subplot(412)
+plt.plot(df_sd["trend"], label="Trend")
+plt.legend(loc="best")
+plt.subplot(413)
+plt.plot(df_sd["seasonal"], label="Seasonal")
+plt.legend(loc="best")
+plt.subplot(414)
+plt.plot(df_sd["residual"], label="Residual")
+plt.legend(loc="best")
+plt.tight_layout()
+plt.show()
+
+# 处理 NaN 值 - 方法示例
+df_sd.isnull().sum()
+# 选择其中一种方法进行处理
+# 删除 NaN 值
+# data_cleaned = data.dropna()
+# 前向填充
+df_sd["residual"].fillna(method="ffill", inplace=True)
+# 后向填充
+df_sd["residual"].fillna(method="bfill", inplace=True)
+# 插值
+df_sd["residual"] = df_sd["residual"].interpolate(method="linear")
+# 填充为零
+# df_sd['residual'].fillna(0, inplace=True)
+# 填充为均值
+# df_sd['residual'].fillna(df_sd['residual'].mean(), inplace=True)
+
+# ----------------------------------------------------------------
+# Differencing: Removes linear trends and helps highlight abrupt changes.
+# ----------------------------------------------------------------
+
+df_diff = df.copy()
+df_diff = df_diff[["use_HO"]].resample("D").mean()
+
+df_diff["differenced"] = df_diff["use_HO"].diff().dropna()
+
+# plot to visualize the differenced time series
+plt.figure(figsize=(15, 5), dpi=100)
+sns.lineplot(x=df_diff.index, y=df_diff["differenced"])
+plt.title("Differenced Time Series")
+plt.show()
+
+
+# ----------------------------------------------------------------
+# Denoising
+# ----------------------------------------------------------------
+"""
+Reducing noise helps make anomalies more evident. Moving averages and low-pass filters can smooth out short-term fluctuations while preserving significant changes.
+
+    Moving Average: Smooths the data, reducing noise but potentially also smoothing out minor anomalies.
+
+    Low-pass Filter: More sophisticated than moving average, can preserve more of the original signal's characteristics.
+"""
+
+# --------------------------------------------------------------
+# Butterworth lowpass filter
+# --------------------------------------------------------------
+df_lowpass = df.copy()
+
+df_lowpass = df_lowpass[app_columns].resample("D").mean()
+col = "use_HO"
+df_lowpass = df_lowpass[[col]]
+LowPass = LowPassFilter()
+
+fs = 1  # Sampling frequency
+cutoff = 0.25  # higher cutoff frequency, more close to raw data
+
+df_lowpass = LowPass.low_pass_filter(df_lowpass, col, fs, cutoff, order=5)
+
+# Visualization -1 : compare raw data and filtered data in different plot
+fig, ax = plt.subplots(nrows=2, sharex=True, figsize=(20, 10))
+ax[0].plot(df_lowpass[col].reset_index(drop=True), label="raw data")
+ax[1].plot(
+    df_lowpass[col + "_lowpass"].reset_index(drop=True), label="butterworth filter"
+)
+ax[0].legend(
+    loc="upper center",
+    bbox_to_anchor=(0.5, 1.15),
+    fancybox=True,
+    shadow=True,
+)
+ax[1].legend(
+    loc="upper center",
+    bbox_to_anchor=(0.5, 1.15),
+    fancybox=True,
+    shadow=True,
+)
+
+# Visualization - 2 : compare raw data and filtered data in the same plot
+plt.figure(figsize=(15, 5))
+plt.plot(df_lowpass[col], label="Original")
+plt.plot(df_lowpass[col + "_lowpass"], label="Filtered", color="red")
+plt.legend()
+plt.show()
+
+df_lowpass[col] = df_lowpass[col + "_lowpass"]
+del df_lowpass[col + "_lowpass"]
+
+# for col in app_columns:
+#     df_lowpass = LowPass.low_pass_filter(df_lowpass, col, fs, cutoff, order=5)
+#     df_lowpass[col] = df_lowpass[col + "_lowpass"]
+#     del df_lowpass[col + "_lowpass"]
+
+# Plot a single column
+col = "use_HO"
+dataset, _ = mark_outliers_isolation_forest(df_lowpass, [col])
+plot_binary_outliers(
+    dataset=dataset, col=col, outlier_col="outlier_iso_forest", reset_index=True
+)
+
+
+# --------------------------------------------------------------
+# Choose method and deal with outliers
+# --------------------------------------------------------------
+
+# Test on single column
+col = "use_HO"
+dataset, _ = mark_outliers_isolation_forest(df_lowpass, [col])
+dataset.loc[dataset["outlier_iso_forest"], col] = np.nan
+
+
+# Create a loop
+
+outlier_removed_df = df.copy()
+
+for col in outlier_columns:
+    for label in df["label"].unique():
+        dataset = mark_outliers_isolation_forest(df[df["label"] == label], col)
+
+        # Replace values marked as outliers with Nan
+        dataset.loc[dataset[col + "_outlier"], col] = np.nan
+
+        # update the column in the original dataframe
+        outlier_removed_df.loc[(outlier_removed_df["label"] == label), col] = dataset[
+            col
+        ]
+
+        n_outliers = len(dataset) - len(dataset[col].dropna())
+        print(f"Removed {n_outliers} from {col} for {label}")
+
+outlier_removed_df.info()
+
+
+# --------------------------------------------------------------
+# Export new dataframe
+# --------------------------------------------------------------
+
+outlier_removed_df.to_pickle("../../data/interim/02-outlier_removed_chauvenet.pkl")

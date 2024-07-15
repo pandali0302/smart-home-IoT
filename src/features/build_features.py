@@ -2,6 +2,10 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+from DataTransformation import LowPassFilter, PrincipalComponentAnalysis
+from TemporalAbstraction import NumericalAbstraction
+from FrequencyAbstraction import FourierTransformation
+from sklearn.cluster import KMeans
 
 # --------------------------------------------------------------
 # Load data
@@ -22,29 +26,3 @@ df.describe()
 data['temp_humidity_interaction'] = data['temperature'] * data['humidity']
 
 """
-
-
-# ----------------------------------------------------------------
-# Time-Series Analysis / Seasonality and Trend
-# ----------------------------------------------------------------
-# Iterate each appliance, plot the time series, resample to daily
-def time_series_plot(data):
-    data_resampled = data.resample(
-        "D"
-    ).mean()  # Resample time to day and calculate the mean
-    for i in data_resampled.columns:
-        plt.figure(figsize=(15, 5), dpi=100)
-        sns.lineplot(x=data_resampled.index, y=data_resampled[i], label=i)
-        plt.title(f"{i} Time Series")
-        plt.legend()
-        plt.show()
-
-
-app_columns = df.columns[:13]
-weather_columns = df.columns[13:-7]
-time_series_plot(df[app_columns])
-#  some appliances have seasonality, some have trend, some have both
-#  Furnace has a trend, Wine cellar has seasonality, Fridge has both
-
-time_series_plot(df[weather_columns])
-#  temperature and dewPoint have seasonality, visibility has trend

@@ -247,7 +247,7 @@ for col in outlier_columns:
 
 
 # --------------------------------------------------------------
-# Local outlier factor (distance based)
+# Local outlier factor (density based)
 # --------------------------------------------------------------
 # Insert LOF function
 def mark_outliers_lof(dataset, columns, n=20):
