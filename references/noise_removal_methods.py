@@ -20,7 +20,9 @@ By combining these methods, you can effectively remove noise from time series da
 """
 
 # ----------------------------------------------------------------
-# Smoothing Techniques
+# Smoothing Techniques 平滑技术
+# 去趋势是为了去除数据中的长期趋势成分，使得数据更加平稳和易于分析；
+# 而平滑是为了去除数据中的短期波动，使得数据中的长期趋势更加明显
 # ----------------------------------------------------------------
 """
 1. Moving Average

@@ -1,16 +1,15 @@
+from matplotlib import use
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 import scipy.stats as stats
+import scipy
 import pylab
+import math
 from sklearn.neighbors import LocalOutlierFactor
 from statsmodels.tsa.seasonal import seasonal_decompose
-from DataTransformation import LowPassFilter, PrincipalComponentAnalysis
-from TemporalAbstraction import NumericalAbstraction
-from FrequencyAbstraction import FourierTransformation
-from sklearn.cluster import KMeans
-
+from DataTransformation import LowPassFilter
 
 # --------------------------------------------------------------
 # Load data
@@ -22,7 +21,7 @@ outlier_columns = df.columns[:13]
 
 
 # ----------------------------------------------------------------
-# function to return plots for the feature
+# normality test
 # ----------------------------------------------------------------
 cp = df.copy()
 outlier_columns = cp.columns[:13]
@@ -179,6 +178,76 @@ plot_binary_outliers(
 # Loop over all columns
 for col in outlier_columns:
     dataset = mark_outliers_zscore(df, col)
+    plot_binary_outliers(
+        dataset=dataset, col=col, outlier_col=col + "_outlier", reset_index=True
+    )
+
+# --------------------------------------------------------------
+# Chauvenets criteron (distribution based)
+# --------------------------------------------------------------
+"""
+It's important to note that Chauvenet's criterion is only applicable to datasets that are normally distributed. If your dataset is not normally distributed, this method may not be suitable for identifying outliers.
+"""
+# Check for normal distribution
+df[["use_HO"]].plot.hist(bins=50, alpha=0.5, figsize=(10, 5), title="Histogram")
+
+
+# Insert Chauvenet's function
+def mark_outliers_chauvenet(dataset, col, C=2):
+    """Finds outliers in the specified column of datatable and adds a binary column with
+    the same name extended with '_outlier' that expresses the result per data point.
+
+    Taken from: https://github.com/mhoogen/ML4QS/blob/master/Python3Code/Chapter3/OutlierDetection.py
+
+    Args:
+        dataset (pd.DataFrame): The dataset
+        col (string): The column you want apply outlier detection to
+        C (int, optional): Degree of certainty for the identification of outliers given the assumption
+                           of a normal distribution, typicaly between 1 - 10. Defaults to 2.
+
+    Returns:
+        pd.DataFrame: The original dataframe with an extra boolean column
+        indicating whether the value is an outlier or not.
+    """
+
+    dataset = dataset.copy()
+    # Compute the mean and standard deviation.
+    mean = dataset[col].mean()
+    std = dataset[col].std()
+    N = len(dataset.index)
+    criterion = 1.0 / (C * N)
+
+    # Consider the deviation for the data points.
+    deviation = abs(dataset[col] - mean) / std
+
+    # Express the upper and lower bounds.
+    low = -deviation / math.sqrt(C)
+    high = deviation / math.sqrt(C)
+    prob = []
+    mask = []
+
+    # Pass all rows in the dataset.
+    for i in range(0, len(dataset.index)):
+        # Determine the probability of observing the point
+        prob.append(
+            1.0 - 0.5 * (scipy.special.erf(high[i]) - scipy.special.erf(low[i]))
+        )
+        # And mark as an outlier when the probability is below our criterion.
+        mask.append(prob[i] < criterion)
+    dataset[col + "_outlier"] = mask
+    return dataset
+
+
+col = "use_HO"
+dataset = mark_outliers_chauvenet(df, col)
+plot_binary_outliers(
+    dataset=dataset, col=col, outlier_col=col + "_outlier", reset_index=True
+)
+
+
+# Loop over all columns
+for col in outlier_columns:
+    dataset = mark_outliers_chauvenet(df, col)
     plot_binary_outliers(
         dataset=dataset, col=col, outlier_col=col + "_outlier", reset_index=True
     )
@@ -348,7 +417,7 @@ plt.show()
 df_sd.isnull().sum()
 # 选择其中一种方法进行处理
 # 删除 NaN 值
-# data_cleaned = data.dropna()
+df_sd_cleaned = df_sd.dropna()
 # 前向填充
 df_sd["residual"].fillna(method="ffill", inplace=True)
 # 后向填充
@@ -437,47 +506,53 @@ del df_lowpass[col + "_lowpass"]
 #     del df_lowpass[col + "_lowpass"]
 
 # Plot a single column
-col = "use_HO"
+col = "use_HO_lowpass"
 dataset, _ = mark_outliers_isolation_forest(df_lowpass, [col])
 plot_binary_outliers(
     dataset=dataset, col=col, outlier_col="outlier_iso_forest", reset_index=True
 )
 
 
-# --------------------------------------------------------------
-# Choose method and deal with outliers
-# --------------------------------------------------------------
+# ----------------------------------------------------------------
+# 预处理流程
+# 先去趋势再去噪是比较常见和推荐的顺序，
+# 这样可以更好地消除长期趋势影响，使得去噪处理更聚焦于短期波动，保留数据中的关键异常特征。
+# ----------------------------------------------------------------
+# 先去趋势再去噪
+# 1. 使用加性模型进行季节性分解去趋势
+df_sd = df.copy()
+df_sd = df_sd[["use_HO"]]
 
-# Test on single column
+# Seasonal decomposition
+result = seasonal_decompose(df_sd["use_HO"], model="additive", period=12)
+df_sd["trend"] = result.trend
+df_sd["seasonal"] = result.seasonal
+df_sd["residual"] = result.resid
+df_sd_cleaned = df_sd.dropna()
+df_sd.info()
+
+# 2. 对残差部分进行低通滤波去噪
+col = "residual"
+LowPass = LowPassFilter()
+
+fs = 1  # Sampling frequency
+cutoff = 0.25  # higher cutoff frequency, more close to raw data
+
+df_lowpass = LowPass.low_pass_filter(df_sd_cleaned, col, fs, cutoff, order=5)
+# df_lowpass = df_lowpass["2016-01-01 08:00:00":"2016-01-05 08:00:00"]
+df_lowpass["use_HO"] = df_lowpass["residual_lowpass"]
+del df_lowpass["residual_lowpass"]
+
+# 3. Choose method and deal with outliers
 col = "use_HO"
-dataset, _ = mark_outliers_isolation_forest(df_lowpass, [col])
-dataset.loc[dataset["outlier_iso_forest"], col] = np.nan
-
-
-# Create a loop
-
-outlier_removed_df = df.copy()
-
-for col in outlier_columns:
-    for label in df["label"].unique():
-        dataset = mark_outliers_isolation_forest(df[df["label"] == label], col)
-
-        # Replace values marked as outliers with Nan
-        dataset.loc[dataset[col + "_outlier"], col] = np.nan
-
-        # update the column in the original dataframe
-        outlier_removed_df.loc[(outlier_removed_df["label"] == label), col] = dataset[
-            col
-        ]
-
-        n_outliers = len(dataset) - len(dataset[col].dropna())
-        print(f"Removed {n_outliers} from {col} for {label}")
-
-outlier_removed_df.info()
+dataset, outliers, X_scores = mark_outliers_lof(df_lowpass, [col])
+dataset.loc[dataset["outlier_lof"], col] = np.nan
+dataset.dropna(inplace=True)
+outlier_removed_df = dataset[["use_HO"]]
 
 
 # --------------------------------------------------------------
 # Export new dataframe
 # --------------------------------------------------------------
 
-outlier_removed_df.to_pickle("../../data/interim/02-outlier_removed_chauvenet.pkl")
+outlier_removed_df.to_pickle("../../data/interim/03-outlier_removed_HouseOverall.pkl")
