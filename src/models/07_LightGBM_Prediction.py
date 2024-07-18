@@ -1,6 +1,3 @@
-# ----------------------------------------------------------------
-# Modeling for Energy Consumption Prediction
-# ----------------------------------------------------------------
 """
 - 传统时间序列预测模型,像MA、VAR和ARIMA,理论基础扎实,计算效率高,如果是处理单变量的预测问题，传统时序模型可以发挥较大的优势；但在处理复杂的非线性关系和多变量交互效应方面,就显得有点力不从心。
 
@@ -13,20 +10,18 @@
 
 - 特征工程和损失函数,在机器学习中至关重要,合理的特征设计和损失函数选择能够显著提升模型性能。
 
-- 模型架构的创新带来的提升有限，优先关注特征工程和损失函数的优化更为重要。
+
 
 机器学习模型：适合处理复杂特征和非线性关系
-    1. SVM  
-        --  对数据的尺度敏感，特别是使用欧几里得距离作为核函数时，通常需要标准化
-            在高维空间中非常有效
     2. LightGBM 
         -- 基于梯度提升的决策树算法，对特征的尺度不是非常敏感。不一定需要对数据进行归一化或标准化
             计算速度快，模型精度高；
             缺失值不需要处理，比较方便；
-            支持 category 变量；
+            原生支持 category 变量，不需要对类别型变量进行独热编码(One-Hot Encoding)，但需要转换为字符串类型；
             支持特征交叉。
 
-    3. XGBoost
+        https://github.com/microsoft/LightGBM/tree/master/examples/python-guide
+
 
 """
 
@@ -37,16 +32,35 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_absolute_percentage_error,
+    mean_squared_error,
+)
 
-# import shap
-# shap.initjs()
 import lightgbm as lgb
-from sklearn.model_selection import TimeSeriesSplit, GridSearchCV
+from sklearn.model_selection import (
+    train_test_split,
+    TimeSeriesSplit,
+    RandomizedSearchCV,
+    GridSearchCV,
+)
 
-
-df = pd.read_pickle("../../data/interim/02_add_time_features.pkl")
+# ----------------------------------------------------------------
+# load data and resample and add time features
+# ----------------------------------------------------------------
+df = pd.read_pickle("../../data/interim/01_data_processed.pkl")
 data = df.copy()
+data = data.resample("D").mean()
+data.info()
+data.head(20)
+data.tail()
+
+data["year"] = data.index.year
+data["quarter"] = data.index.quarter
+data["month"] = data.index.month
+data["weekday"] = data.index.weekday
+
 
 # ----------------------------------------------------------------
 # Feature engineering
@@ -58,7 +72,6 @@ use weather information and time information as regression features during predi
 #  weather features extraction like temperature, humidity, wind speed, etc.
 #  interaction features between weather conditions and energy consumption
 #  lag features to capture temporal dependencies
-#  rolling window statistics to capture temporal patterns
 weather_features = [
     "temperature",
     "humidity",
@@ -72,87 +85,48 @@ weather_features = [
     "precipProbability",
 ]
 
-time_features = ["month", "weekday", "day"]
-
+time_features = ["year", "quarter", "month", "weekday"]
 target = ["use_HO"]
 
-# 对类别变量timing列进行独热编码
-data = pd.get_dummies(data, columns=["timing"])
 
 # 选择特征和目标
 features = weather_features + time_features
-features += [
-    col for col in data.columns if "timing_" in col
-]  # 添加独热编码后的timing列
+
 
 X = data[features]
 y = data[target]
-
 
 # ----------------------------------------------------------------
 # Split data into training and testing sets
 # ----------------------------------------------------------------
 # 按时间顺序划分数据集
-train_size = int(0.8 * len(data))
-X_train, X_test = X[:train_size], X[train_size:]
-y_train, y_test = y[:train_size], y[train_size:]
+# 划分训练集和测试集
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+
+# 可视化训练集和测试集之间的分割:
+plt.figure(figsize=(15, 5))
+plt.plot(X_train.index, y_train, label="train")
+plt.plot(X_test.index, y_test, label="test")
+plt.legend()
+plt.show()
 
 
 # ----------------------------------------------------------------
-# LightGBM Model
+# Model training
 # ----------------------------------------------------------------
-# 创建LightGBM数据集。这种数据格式可以更高效地进行训练，因为它是为LightGBM量身定制的，能够更好地利用内存并加速训练过程。
-train_data = lgb.Dataset(X_train, label=y_train)
-test_data = lgb.Dataset(X_test, label=y_test, reference=train_data)
-
-# 定义参数
-params = {
-    "objective": "regression",
-    "metric": "rmse",
-    "boosting_type": "gbdt",
-    "learning_rate": 0.05,
-    "num_leaves": 31,
-    "verbose": 0,
-}
-
-# 训练模型  原生的 lgb.train() 接口；
-bst = lgb.train(
-    params,
-    train_data,
-    num_boost_round=1000,
-    valid_sets=[test_data],
-    callbacks=[
-        lgb.early_stopping(stopping_rounds=10, verbose=True),
-        lgb.log_evaluation(),
-    ],
-)
-
-# 进行预测
-y_pred = bst.predict(X_test, num_iteration=bst.best_iteration)
-
-# 评估模型
-rmse = mean_squared_error(y_test, y_pred, squared=False)
-print(f"RMSE: {rmse}")
-
-# ----------------------------------------------------------------
-# Hyperparameter Tuning
-# Random Search
-# ----------------------------------------------------------------
-from sklearn.model_selection import RandomizedSearchCV, TimeSeriesSplit
-
 # 定义参数空间
 param_grid = {
-    "num_leaves": [31, 50, 70, 100],
+    "num_leaves": [20, 30, 50, 70, 100],
     "learning_rate": [0.01, 0.05, 0.1, 0.2],
     "n_estimators": [100, 200, 500, 1000],
     "min_child_samples": [20, 30, 40, 50],
     "subsample": [0.6, 0.8, 1.0],
-    "colsample_bytree": [0.6, 0.8, 1.0],
+    "colsample_bytree": [0.4, 0.6, 0.8, 1.0],
 }
 
 # 创建LightGBM Regressor   sklearn 的 lgb.LGBMRegressor() 接口
 lgb_estimator = lgb.LGBMRegressor(
-    objective="regression", metric="rmse", boosting_type="gbdt"
+    objective="regression", metric="mse", boosting_type="gbdt"
 )
 
 # 创建TimeSeriesSplit对象
@@ -164,7 +138,7 @@ random_search = RandomizedSearchCV(
     param_distributions=param_grid,
     n_iter=50,
     cv=tscv,
-    verbose=1,
+    verbose=-1,
     n_jobs=-1,
     random_state=42,
 )
@@ -174,76 +148,86 @@ random_search.fit(X_train, y_train)
 
 # 打印最佳参数
 print(f"Best parameters found by random search are: {random_search.best_params_}")
-# RMSE: 0.6441369430176253
 
-# ----------------------------------------------------------------
-# find best parameters and train the final model
-# ----------------------------------------------------------------
-best_params = random_search.best_params_
 
-# 更新参数
-params.update(best_params)
-
-# 创建LightGBM数据集
-train_data = lgb.Dataset(X_train, label=y_train)
-test_data = lgb.Dataset(X_test, label=y_test, reference=train_data)
-
-# 记录训练过程的评估结果
-evals_result = {}
-
-# 训练最终模型
-final_model = lgb.train(
-    params,
-    train_data,
-    num_boost_round=1000,
-    valid_sets=[train_data, test_data],
-    valid_names=["train", "test"],
-    callbacks=[
-        lgb.early_stopping(stopping_rounds=10, verbose=True),
-        lgb.log_evaluation(),
-        lgb.record_evaluation(evals_result),
-    ],
-)
+# 使用最佳参数创建最终模型
+best_model = random_search.best_estimator_
 
 # 进行预测
-y_final_pred = final_model.predict(X_test, num_iteration=final_model.best_iteration)
-
-# 评估模型
-final_rmse = mean_squared_error(y_test, y_final_pred, squared=False)
-print(f"Final RMSE: {final_rmse}")
-# Final RMSE: 0.6455591879731212
+y_final_pred = best_model.predict(X_test)
 
 
 # ----------------------------------------------------------------
-# plot loss curve
+# evaluate model
 # ----------------------------------------------------------------
-plt.figure(figsize=(10, 6))
-plt.plot(evals_result["train"]["rmse"], label="Train RMSE")
-plt.plot(evals_result["test"]["rmse"], label="Test RMSE")
-plt.xlabel("Number of Iterations")
-plt.ylabel("RMSE")
-plt.title("Training and Validation RMSE over Iterations")
+def evaluate_model(y_test, prediction):
+    print(f"MAE: {mean_absolute_error(y_test, prediction)}")
+    print(f"MSE: {mean_squared_error(y_test, prediction)}")
+    print(f"MAPE: {mean_absolute_percentage_error(y_test, prediction)}")
+
+
+evaluate_model(y_test, y_final_pred)
+# MAE: 0.17146917462398556
+# MSE: 0.04947370236449221
+# MAPE: 0.22951007822761418
+
+# ----------------------------------------------------------------
+# Plot predictions
+# ----------------------------------------------------------------
+plt.figure(figsize=(15, 5))
+# plt.plot(X.index, y, label="actual")
+plt.plot(X_test.index, y_test, label="actual")
+plt.plot(X_test.index, y_final_pred, label="predicted")
 plt.legend()
 plt.show()
 
+
 # ----------------------------------------------------------------
-# plot
+# Feature importance
 # ----------------------------------------------------------------
-df = pd.DataFrame(
-    {
-        "test": y_test.values.flatten(),
-        "Predicted": y_final_pred.flatten(),
-    },
-    index=y_test.index,
+# Plot feature importance,  for lgb.Booster object 原生接口
+plt.figure(figsize=(10, 6))
+lgb.plot_importance(best_model, max_num_features=10)
+plt.title("Feature Importance")
+plt.show()
+
+#  for 'LGBMRegressor' object
+plt.figure(figsize=(10, 6))
+plt.barh(X_train.columns, best_model.feature_importances_)
+plt.title("Feature Importance")
+plt.xlabel("Importance")
+plt.ylabel("Features")
+plt.show()
+
+
+# Get feature importance values
+importance = best_model.feature_importances_
+feature_names = X_train.columns
+
+# Create a DataFrame for feature importance
+feature_importance_df = pd.DataFrame(
+    {"feature": feature_names, "importance": importance}
+)
+feature_importance_df = feature_importance_df.sort_values(
+    by="importance", ascending=False
 )
 
+print(feature_importance_df)
 
-# 绘制真实值和预测值的折线图
-plt.figure(figsize=(10, 6))
-plt.plot(df["test"], label="Test")
-plt.plot(df["Predicted"], label="Predicted")
-plt.xlabel("Time")
-plt.ylabel("Energy Consumption")
-plt.title("True vs Predicted Energy Consumption")
-plt.legend()
-plt.show()
+# ----------------------------------------------------------------
+# save model
+# ----------------------------------------------------------------
+import joblib
+
+joblib.dump(best_model, "../../models/lightgbm_model.pkl")
+
+
+# Save the model -- only for lgb.Booster object
+model_filename = "lightgbm_model.txt"
+best_model.save_model("../../models/" + model_filename)
+
+# Load the model from a file
+loaded_model = lgb.Booster("../../models/" + model_filename)
+
+# Make predictions with the loaded model
+y_loaded_pred = loaded_model.predict(X_test, num_iteration=loaded_model.best_iteration)
