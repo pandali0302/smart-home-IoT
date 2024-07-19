@@ -82,14 +82,21 @@ df["cloudCover"] = df["cloudCover"].astype("float")
 # drop columns that are not useful for analysis
 df["icon"].value_counts()
 df = df.drop(columns=["summary", "icon"])
+df.tail()
 
-df_basic = df
-df_TimeSeries = df.set_index("time")
+# convert 'time' column to datetime
+df["time"] = pd.to_datetime(df["time"], unit="s")
+df["time"] = pd.DatetimeIndex(
+    pd.date_range("2016-01-01 05:00", periods=len(df), freq="30min")
+)
+df = df.set_index("time")
 
+df.info()
+numerical_cols = [name for name in df.columns if df[name].dtype in ["int64", "float64"]]
 
 # Check Correlation between numerical columns
 fig = plt.subplots(figsize=(10, 8))
-corr = df_TimeSeries[numerical_cols].corr()
+corr = df[numerical_cols].corr()
 sns.heatmap(corr[corr > 0.9], vmax=1, vmin=-1, center=0)
 plt.show()
 
@@ -99,28 +106,28 @@ plt.show()
 # 'temperature' and 'apparentTemperature'
 # They are indeed the same data (overlaping perfectly)
 fig, axes = plt.subplots(3, 1, figsize=(10, 5))
-df_TimeSeries[["use", "House overall"]].resample("D").mean().plot(ax=axes[0])
-df_TimeSeries[["gen", "Solar"]].resample("D").mean().plot(ax=axes[1])
-df_TimeSeries[["temperature", "apparentTemperature", "dewPoint"]].resample(
-    "D"
-).mean().plot(ax=axes[2])
+df[["use", "House overall"]].resample("D").mean().plot(ax=axes[0])
+df[["gen", "Solar"]].resample("D").mean().plot(ax=axes[1])
+df[["temperature", "apparentTemperature", "dewPoint"]].resample("D").mean().plot(
+    ax=axes[2]
+)
 
 
 # columns' correlation coefficient is almost over 0.95, so we need to put these columns together as a new columns.
-df_TimeSeries[["temperature", "apparentTemperature", "dewPoint"]].corr()
+df[["temperature", "apparentTemperature", "dewPoint"]].corr()
 
 # Removing Duplicate Columns
-df_TimeSeries["use_HO"] = df_TimeSeries["use"]
-df_TimeSeries["gen_Solar"] = df_TimeSeries["gen"]
-df_TimeSeries.drop(
+df["use_HO"] = df["use"]
+df["gen_Solar"] = df["gen"]
+df.drop(
     ["use", "House overall", "gen", "Solar", "apparentTemperature"],
     axis=1,
     inplace=True,
 )
-df_TimeSeries.columns
+df.columns
 
 # rearrange columns
-df_TimeSeries = df_TimeSeries[
+df = df[
     [
         "use_HO",
         "gen_Solar",
@@ -147,8 +154,8 @@ df_TimeSeries = df_TimeSeries[
         "precipProbability",
     ]
 ]
-df_TimeSeries.head()
-df_TimeSeries.info()
+df.head()
+df.info()
 
 
 # --------------------------------------------------------------
@@ -183,6 +190,11 @@ def read_preprocessing_data(file_path):
     # drop columns that are not useful for analysis
     df = df.drop(columns=["summary", "icon"])
 
+    # convert 'time' column to datetime
+    df["time"] = pd.to_datetime(df["time"], unit="s")
+    df["time"] = pd.DatetimeIndex(
+        pd.date_range("2016-01-01 05:00", periods=len(df), freq="30min")
+    )
     df = df.set_index("time")
 
     # Removing Duplicate Columns
@@ -226,7 +238,10 @@ def read_preprocessing_data(file_path):
     return df
 
 
+df = read_preprocessing_data(file_path)
+df.head()
+
 # --------------------------------------------------------------
 # Export dataset
 # --------------------------------------------------------------
-df_TimeSeries.to_pickle("../../data/interim/01_data_processed.pkl")
+df.to_pickle("../../data/interim/01_data_processed.pkl")
