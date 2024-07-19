@@ -146,14 +146,15 @@ time_series_plot(df[weather_columns])
 # To utilize datetime information such as year, month and day in EDA and modeling phase, we need to extract them from time column.
 df.head()
 df.tail()
-df["day"].unique()
+
 # we have datatimeindex, extract it to year, month, weekday, day, hour and minute
-df["year"] = df.index.year
+# df["year"] = df.index.year
+df["quarter"] = df.index.quarter
 df["month"] = df.index.month
 df["weekday"] = df.index.weekday  # 0 is Monday
 df["day"] = df.index.day
 df["hour"] = df.index.hour
-df["minute"] = df.index.minute
+# df["minute"] = df.index.minute
 
 #  based on column hour, add a new column to indicate the different period (Night, Morning, Afternoon and Evening ) of a day.
 
@@ -221,6 +222,8 @@ def plot_average_consumption(data, app_columns, groupby_column):
             plt.xticks(
                 np.arange(4), labels=["Morning", "Afternoon", "Evening", "Night"]
             )
+        elif groupby_column == "quarter":
+            plt.xticks(np.arange(1, 5))
         # plt.grid(True)
         plt.tight_layout()
         plt.show()
