@@ -138,7 +138,7 @@ random_search = RandomizedSearchCV(
     param_distributions=param_grid,
     n_iter=50,
     cv=tscv,
-    verbose=-1,
+    # verbose=0,
     n_jobs=-1,
     random_state=42,
 )
@@ -175,10 +175,11 @@ evaluate_model(y_test, y_final_pred)
 # Plot predictions
 # ----------------------------------------------------------------
 plt.figure(figsize=(15, 5))
-# plt.plot(X.index, y, label="actual")
-plt.plot(X_test.index, y_test, label="actual")
-plt.plot(X_test.index, y_final_pred, label="predicted")
+plt.plot(X.index, y, label="actual")
+# plt.plot(X_test.index, y_test, label="actual")
+plt.plot(X_test.index, y_final_pred, c="r", label="predicted")
 plt.legend()
+plt.savefig("../../reports/figures/07_lightgbm_predictions.png")
 plt.show()
 
 
@@ -189,6 +190,7 @@ plt.show()
 plt.figure(figsize=(10, 6))
 lgb.plot_importance(best_model, max_num_features=10)
 plt.title("Feature Importance")
+plt.savefig("../../reports/figures/07_lightgbm_feature_importance.png")
 plt.show()
 
 #  for 'LGBMRegressor' object

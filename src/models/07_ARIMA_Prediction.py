@@ -33,8 +33,9 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller, acf, pacf
-from statsmodels.tsa.statespace.sarimax import SARIMAX
-from statsmodels.tsa.api import VAR
+
+# from statsmodels.tsa.statespace.sarimax import SARIMAX
+# from statsmodels.tsa.api import VAR
 
 df = pd.read_pickle("../../data/interim/02_add_time_features.pkl")
 df.info()
@@ -66,6 +67,7 @@ def evaluate_model(true, predicted):
 # Base Model: MA 移动平均模型
 # ----------------------------------------------------------------
 # Data resampling by day
+data_daily = data["use_HO"].resample("d").mean()
 train_data_daily = train["use_HO"].resample("d").mean()
 test_data_daily = test["use_HO"].resample("d").mean()
 
@@ -92,6 +94,27 @@ plt.plot(train_data_daily, label="Train")
 plt.plot(test_data_daily, label="Test")
 plt.plot(ma_forecast, label="MA Forecast")
 plt.legend()
+plt.show()
+
+# Plot Rolling forecast
+rolling_predictions = []
+for i in range(len(test_data_daily)):
+    train = data_daily[: len(train_data_daily) + i]
+    model = ARIMA(train, order=(0, 0, 10))
+    model_fit = model.fit()
+    pred = model_fit.forecast(steps=1)[0]
+    rolling_predictions.append(pred)
+
+# Create a dataframe for comparison
+test = test_data_daily.to_frame()
+test["predictions"] = rolling_predictions
+
+# Plotting the results
+plt.figure(figsize=(12, 6))
+plt.plot(data_daily, label="Original Data")
+plt.plot(test["predictions"], label="Rolling Forecast", color="red")
+plt.legend()
+plt.savefig("../../reports/figures/07_MA_Rolling_Forecast.png")
 plt.show()
 
 
@@ -332,6 +355,7 @@ plt.figure(figsize=(12, 6))
 plt.plot(data_daily, label="Original Data")
 plt.plot(test["predictions"], label="Rolling Forecast", color="red")
 plt.legend()
+plt.savefig("../../reports/figures/07_ARIMA_Rolling_Forecast.png")
 plt.show()
 
 # Evaluation
