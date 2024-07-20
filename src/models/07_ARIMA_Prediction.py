@@ -45,7 +45,7 @@ data = df.copy()
 # ----------------------------------------------------------------
 # Split data into training and testing sets
 # ----------------------------------------------------------------
-size = int(len(data) * 0.7)
+size = int(len(data) * 0.8)
 train = data.iloc[:size]
 test = data.iloc[size:]
 
@@ -77,8 +77,14 @@ ma_mse, ma_rmse, ma_mae, ma_mape, ma_r2 = evaluate_model(test_data_daily, ma_for
 
 # Print evaluation metrics for each model
 print(
-    f"MA Model: MSE={ma_mse}, RMSE={ma_rmse}, MAE={ma_mae}, MAPE={ma_mape}, R2={ma_r2}"
+    f"MA Model: \nMSE={ma_mse} \nRMSE={ma_rmse} \nMAE={ma_mae} \nMAPE={ma_mape} \nR2={ma_r2}"
 )
+# MA Model:
+# MSE=0.05397983397338097
+# RMSE=0.23233560634001188
+# MAE=0.18710604764731073
+# MAPE=26.373997384222363
+# R2=-0.06729702870829368
 
 # plot
 plt.figure(figsize=(15, 5))
@@ -129,9 +135,9 @@ for key, value in resultDFtest[4].items():
 print("DICK-FULLER RESULTS: \n\n{}".format(Out))
 
 """
-Test Statistic                -6.109683e+00 
-p-value                        9.398323e-08 
-
+Test Statistic                -5.875177e+00
+p-value                        3.171872e-07
+#Lags Used                     2.000000e+00
 Number of Observations Used    3.480000e+02
 Critical Value (1%)           -3.449282e+00
 Critical Value (5%)           -2.869881e+00
@@ -255,8 +261,14 @@ plt.show()
 
 # Evaluate the ARIMA model
 mse, rmse, mae, mape, r2 = evaluate_model(test_data_daily, forecast)
-print(f"ARIMA Model: MSE={mse}, RMSE={rmse}, MAE={mae}, MAPE={mape}, R2={r2}")
+print(f"ARIMA Model: \nMSE={mse} \nRMSE={rmse} \nMAE={mae} \nMAPE={mape} \nR2={r2}")
 
+# ARIMA Model:
+# MSE=0.08703779106575858
+# RMSE=0.2950216789758993
+# MAE=0.22627533192969151
+# MAPE=nan
+# R2=-0.0696956433335778
 
 # ----------------------------------------------------------------
 # # Model Evaluation and Tuning
@@ -302,7 +314,7 @@ print(best_model_fit.summary())
 
 # Forecast using the best model
 # Rolling forecast
-size_daily = int(len(data_daily) * 0.7)
+size_daily = int(len(data_daily) * 0.8)
 rolling_predictions = []
 for i in range(size_daily, len(data_daily)):
     train = data_daily[:i]  # Expanding window
@@ -325,12 +337,3 @@ plt.show()
 # Evaluation
 mse, rmse, mae, mape, r2 = evaluate_model(test["use_HO"], test["predictions"])
 print(f"ARIMA Model: \nMSE={mse} \nRMSE={rmse} \nMAE={mae} \nMAPE={mape} \nR2={r2}")
-
-"""
-ARIMA Model: 
-MSE=0.07637068896028011 
-RMSE=0.2763524723252537 
-MAE=0.2111437413493121 
-MAPE=138.8694315552681 
-R2=0.20084478610969192
-"""
