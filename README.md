@@ -33,8 +33,8 @@
     </tr>
     <tr>
       <th>Arima</th>
-      <td>0.073</td>
-      <td>0.218</td>
+      <td>0.055</td>
+      <td>0.186</td>
     </tr>
     <tr>
       <th>LightGBM</th>
