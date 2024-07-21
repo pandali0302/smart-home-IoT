@@ -43,8 +43,8 @@
     </tr>
     <tr>
       <th>LSTM_Multivar</th>
-      <td>0.058</td>
-      <td>0.191</td>
+      <td>0.020</td>
+      <td>0.114</td>
     </tr>
   </tbody>
 </table>

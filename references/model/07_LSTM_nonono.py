@@ -52,6 +52,17 @@ data = df.copy()
 daily_data = data.resample("D").mean()
 
 
+# ----------------------------------------------------------------
+# Split data into training and testing sets
+# ----------------------------------------------------------------
+train_size = int(len(daily_data) * 0.7)
+train_data = daily_data[:train_size]
+test_data = daily_data[train_size:]
+
+# ----------------------------------------------------------------
+# feature scaling
+# ----------------------------------------------------------------
+
 weather_features = [
     "temperature",
     "humidity",
@@ -67,31 +78,28 @@ weather_features = [
 
 target = ["use_HO"]
 
+
 # 选择特征列和目标列
-features = target + weather_features
+features = weather_features + target
 
-daily_data = daily_data[features]
+# 分别对训练集和测试集进行缩放
+scaler = MinMaxScaler()
 
+# 仅使用训练集拟合缩放器
+scaler.fit(train_data[features])
 
-# ----------------------------------------------------------------
-# feature scaling
-# ----------------------------------------------------------------
-# Normalize the features
-scaler = MinMaxScaler(feature_range=(0, 1))
-daily_data[weather_features] = scaler.fit_transform(daily_data[weather_features])
-scaler_target = MinMaxScaler(feature_range=(0, 1))
-daily_data[target] = scaler_target.fit_transform(daily_data[target])
+# 对训练集和测试集进行缩放
+scaled_train_data = scaler.transform(train_data[features])
+scaled_test_data = scaler.transform(test_data[features])
 
-# ----------------------------------------------------------------
-# Split data into training and testing sets
-# ----------------------------------------------------------------
-train_size = int(len(daily_data) * 0.8)
-train_data = daily_data[:train_size]
-test_data = daily_data[train_size:]
+scaled_train_df = pd.DataFrame(
+    scaled_train_data, columns=features, index=train_data.index
+)
+scaled_test_df = pd.DataFrame(scaled_test_data, columns=features, index=test_data.index)
 
-test_data.shape  # (71, 11)
 
 # ----------------------------------------------------------------
+# 创建序列
 # Transform the time series into a supervised learning problem
 # ----------------------------------------------------------------
 """
@@ -128,11 +136,10 @@ def prepare_data(data, win_size, target_feature_idx):
 
 win_size = 1  # 时间窗口
 target_feature_idx = 0  # 指定待预测特征列
-X_train, y_train = prepare_data(train_data, win_size, target_feature_idx)
-X_test, y_test = prepare_data(test_data, win_size, target_feature_idx)
-print("训练集形状:", X_train.shape, y_train.shape)  # (279, 1, 11) (279,)
-print("测试集形状:", X_test.shape, y_test.shape)  # (70, 1, 11) (70,)
-
+X_train, y_train = prepare_data(scaled_train_df, win_size, target_feature_idx)
+X_test, y_test = prepare_data(scaled_test_df, win_size, target_feature_idx)
+print("训练集形状:", X_train.shape, y_train.shape)  # (244, 1, 11) (244,)
+print("测试集形状:", X_test.shape, y_test.shape)
 
 # ----------------------------------------------------------------
 # Build the LSTM model
@@ -148,10 +155,10 @@ model.add(
 )
 # model.add(LSTM(25, activation='relu', return_sequences = False))
 # model.add(Dropout(0.2))
-model.add(Dense(X_train.shape[1]))
+model.add(Dense(1))
 model.compile(optimizer="adam", loss="mse")
-
 model.summary()
+
 
 # 定义回调
 checkpoint_cb = ModelCheckpoint(
@@ -165,7 +172,7 @@ history = model.fit(
     y_train,
     epochs=100,  # 设定一个较大的最大训练轮数
     batch_size=32,
-    validation_data=(X_test, y_test),
+    validation_split=0.2,
     callbacks=[checkpoint_cb, early_stopping_cb],
 )
 
@@ -190,47 +197,38 @@ plot_loss(history)
 # ----------------------------------------------------------------
 # predict the test data
 # ----------------------------------------------------------------
-# make predictions
+# 使用训练好的模型对测试数据集进行预测
 y_pred = model.predict(X_test)
-y_pred_unscaled = scaler_target.inverse_transform(y_pred)
 
-target_data = scaler_target.inverse_transform(daily_data[target])
-y_test_unscaled = target_data[train_size:-win_size]
+# Inverse scaling
+y_pred_unscaled = scaler.inverse_transform(
+    np.concatenate([np.zeros((y_pred.shape[0], X_test.shape[2] - 1)), y_pred], axis=1)
+)[:, -1]
+
+y_test_unscaled = scaler.inverse_transform(
+    np.concatenate(
+        [np.zeros((y_test.shape[0], X_test.shape[2] - 1)), y_test.reshape(-1, 1)],
+        axis=1,
+    )
+)[:, -1]
 
 
 # 可视化预测结果和真实值
 def plot_predictions(y_true, y_pred):
     plt.figure(figsize=(15, 5))
     plt.plot(y_true, label="True Values")
-    plt.plot(y_pred, c="r", label="Predicted Values")
+    plt.plot(y_pred, label="Predicted Values")
     plt.title("True Values vs Predicted Values")
     plt.xlabel("Time")
     plt.ylabel("Energy Consumption")
     plt.legend()
     plt.grid(True)
-    # plt.savefig("../../reports/figures/07_LSTM.png")
     plt.show()
 
 
 # 调用函数绘制预测结果和真实值
 plot_predictions(y_test_unscaled, y_pred_unscaled)
-
-
-# plot the original data and the partial predicted data
-df_pred = pd.DataFrame(y_pred_unscaled, index=daily_data.index[train_size:-win_size])
-df_target = pd.DataFrame(target_data, index=daily_data.index)
-
-plt.figure(figsize=(15, 5))
-plt.plot(df_target, label="Original Values")
-plt.plot(df_pred, c="r", label="Predicted Values")
-plt.title("True Values vs Predicted Values")
-plt.xlabel("Time")
-plt.ylabel("Energy Consumption")
-plt.legend()
-plt.grid(True)
-plt.savefig("../../reports/figures/07_LSTM.png")
-plt.show()
-
+plot_predictions(y_test, y_pred)
 
 # ----------------------------------------------------------------
 # Evaluate the model
@@ -248,10 +246,11 @@ print(f"Root Mean Squared Error (RMSE): {rmse}")
 print(f"Mean Absolute Error (MAE): {mae}")
 print(f"R^2 Score: {r2}")
 
-# Mean Squared Error (MSE): 0.020467856392736745
-# Root Mean Squared Error (RMSE): 0.1430659162509951
-# Mean Absolute Error (MAE): 0.11371609812260568
-# R^2 Score: 0.5927961929592522
+# Mean Squared Error (MSE): 0.058325971839282335
+# Root Mean Squared Error (RMSE): 0.2415077055484614
+# Mean Absolute Error (MAE): 0.1912015371940518
+# R^2 Score: -0.25607121625848217
+
 
 # ----------------------------------------------------------------
 # save the model
@@ -268,9 +267,37 @@ loaded_model = load_model("../../models/LSTM/my_lstm_model.h5")
 loaded_model.summary()
 
 
+# 使用加载的模型进行预测（与之前的预测步骤相同）
+loaded_model_predictions = loaded_model.predict(X_test)
+
+# 反归一化预测结果
+loaded_model_predictions_unscaled = scaler.inverse_transform(
+    np.concatenate(
+        [
+            np.zeros((loaded_model_predictions.shape[0], X_test.shape[2] - 1)),
+            loaded_model_predictions,
+        ],
+        axis=1,
+    )
+)[:, -1]
+
+
 # ----------------------------------------------------------------
 # Anomaly Detection
 # ----------------------------------------------------------------
+# 使用训练好的模型对测试数据集进行预测
+y_pred = model.predict(X_test)
+
+# 反归一化预测值和真实值
+y_test_unscaled = scaler.inverse_transform(
+    np.concatenate(
+        [np.zeros((y_test.shape[0], X_test.shape[2] - 1)), y_test.reshape(-1, 1)],
+        axis=1,
+    )
+)[:, -1]
+y_pred_unscaled = scaler.inverse_transform(
+    np.concatenate([np.zeros((y_pred.shape[0], X_test.shape[2] - 1)), y_pred], axis=1)
+)[:, -1]
 
 # 计算预测误差
 errors = np.abs(y_test_unscaled - y_pred_unscaled)
@@ -293,24 +320,20 @@ def plot_anomalies_with_bounds(y_true, y_pred, anomalies, upper_bound, lower_bou
     plt.plot(y_pred, label="Predicted Values")
     plt.fill_between(
         range(len(y_pred)),
-        lower_bound.flatten(),
-        upper_bound.flatten(),
+        lower_bound,
+        upper_bound,
         color="gray",
         alpha=0.2,
         label="Prediction Bound",
     )
     plt.scatter(
-        np.where(anomalies)[0],
-        y_true[anomalies].flatten(),
-        color="red",
-        label="Anomalies",
+        np.where(anomalies)[0], y_true[anomalies], color="red", label="Anomalies"
     )
     plt.title("True Values vs Predicted Values with Anomalies and Prediction Bound")
     plt.xlabel("Time")
     plt.ylabel("Energy Consumption")
     plt.legend()
     plt.grid(True)
-    plt.savefig("../../reports/figures/07_LSTM_anomalies.png")
     plt.show()
 
 
