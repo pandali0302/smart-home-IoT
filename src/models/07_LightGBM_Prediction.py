@@ -101,7 +101,7 @@ y = data[target]
 # ----------------------------------------------------------------
 # 按时间顺序划分数据集
 # 划分训练集和测试集
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, shuffle=False)
 
 # 可视化训练集和测试集之间的分割:
 plt.figure(figsize=(15, 5))
@@ -179,7 +179,7 @@ plt.plot(X.index, y, label="actual")
 # plt.plot(X_test.index, y_test, label="actual")
 plt.plot(X_test.index, y_final_pred, c="r", label="predicted")
 plt.legend()
-plt.savefig("../../reports/figures/07_lightgbm_predictions.png")
+# plt.savefig("../../reports/figures/07_lightgbm_predictions.png")
 plt.show()
 
 

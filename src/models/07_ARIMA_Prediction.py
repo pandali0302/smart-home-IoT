@@ -81,6 +81,7 @@ ma_mse, ma_rmse, ma_mae, ma_mape, ma_r2 = evaluate_model(test_data_daily, ma_for
 print(
     f"MA Model: \nMSE={ma_mse} \nRMSE={ma_rmse} \nMAE={ma_mae} \nMAPE={ma_mape} \nR2={ma_r2}"
 )
+
 # MA Model:
 # MSE=0.05397983397338097
 # RMSE=0.23233560634001188
@@ -127,7 +128,7 @@ from statsmodels.tsa.arima.model import ARIMA
 # load and plot data
 data_daily = data["use_HO"].resample("d").mean()
 # normalize data
-data_daily = np.log(data_daily)
+# data_daily = np.log(data_daily)
 
 rollingMEAN = data_daily.rolling(window=10).mean()
 rollingSTD = data_daily.rolling(window=10).std()
@@ -158,8 +159,8 @@ for key, value in resultDFtest[4].items():
 print("DICK-FULLER RESULTS: \n\n{}".format(Out))
 
 """
-Test Statistic                -5.875177e+00
-p-value                        3.171872e-07
+Test Statistic                -6.109683e+00
+p-value                        9.398323e-08
 #Lags Used                     2.000000e+00
 Number of Observations Used    3.480000e+02
 Critical Value (1%)           -3.449282e+00
@@ -265,14 +266,14 @@ data_daily = np.log(data_daily) # added it at the beginning
 
 
 # Forecast
-train_data_daily = np.log(train_data_daily)
-test_data_daily = np.log(test_data_daily)
+# train_data_daily = np.log(train_data_daily)
+# test_data_daily = np.log(test_data_daily)
 
 forecast_steps = len(test_data_daily)
 forecast = arima_model_fit.forecast(steps=forecast_steps)
 
 # Plot the forecast against actual values
-plt.figure(figsize=(10, 6))
+plt.figure(figsize=(15, 5))
 plt.plot(train_data_daily.index, train_data_daily, label="Training Data")
 plt.plot(test_data_daily.index, test_data_daily, label="Test Data", color="orange")
 plt.plot(test_data_daily.index, forecast, label="Forecast", color="green")
@@ -287,12 +288,11 @@ mse, rmse, mae, mape, r2 = evaluate_model(test_data_daily, forecast)
 print(f"ARIMA Model: \nMSE={mse} \nRMSE={rmse} \nMAE={mae} \nMAPE={mape} \nR2={r2}")
 
 # ARIMA Model:
-# MSE=0.08703779106575858
-# RMSE=0.2950216789758993
-# MAE=0.22627533192969151
+# MSE=0.055169247688621366
+# RMSE=0.234881348107127
+# MAE=0.1858955452584208
 # MAPE=nan
-# R2=-0.0696956433335778
-
+# R2=-0.09081428748324605
 # ----------------------------------------------------------------
 # # Model Evaluation and Tuning
 # ----------------------------------------------------------------
@@ -361,3 +361,10 @@ plt.show()
 # Evaluation
 mse, rmse, mae, mape, r2 = evaluate_model(test["use_HO"], test["predictions"])
 print(f"ARIMA Model: \nMSE={mse} \nRMSE={rmse} \nMAE={mae} \nMAPE={mape} \nR2={r2}")
+
+# ARIMA Model:
+# MSE=0.055169247688621366
+# RMSE=0.234881348107127
+# MAE=0.1858955452584208
+# MAPE=nan
+# R2=-0.09081428748324605
