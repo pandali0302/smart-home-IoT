@@ -1,1 +1,4 @@
+git filter-branch --force --index-filter \
+  "git rm --cached --ignore-unmatch path/to/your/large-file.csv" \
+  --prune-empty --tag-name-filter cat -- --all
 HomeC.csv filter=lfs diff=lfs merge=lfs -text
