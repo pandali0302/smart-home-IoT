@@ -7,3 +7,4 @@ scipy
 IPython
 statsmodels
 lightgbm
+lstm
